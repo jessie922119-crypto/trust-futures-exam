@@ -102,7 +102,7 @@ function toItem(raw, keepOrder) {
     id: raw.id, exam: raw.exam || '', subject: raw.subject || '', topic: raw.topic || '綜合', kind: kindOf(raw),
     q: raw.q, opts: perm.map(function (i) { return raw.options[i]; }),
     exps: perm.map(function (i) { return (raw.explain && raw.explain[i]) || ''; }),
-    ans: perm.indexOf(raw.answer), src: raw.src || '', note: raw.note || '', perm: perm
+    ans: perm.indexOf(raw.answer), src: raw.src || '', note: raw.note || '', nv: raw.nv ? 1 : 0, perm: perm
   };
 }
 /* 顯示用（原始順序，不打散） */
@@ -310,8 +310,13 @@ function offNote(item) {
     h = '<div class="offnote">📋 本題為<b>官方歷屆試題</b>' + (y ? '（' + y + ' 年）' : '') + '，綠色標示為<b>官方標準答案</b>。'
       + ((!y || +y < 2025) ? '<br><span class="ow">※ 答案依當期法規；若相關法規其後已修正，請以最新規定為準。</span>' : '') + '</div>';
   }
-  if (item.note) h += '<div class="offexp"><b>解析</b>　' + fmtTxt(item.note) + '</div>';
+  if (item.note) h += noteHtml(item);
   return h;
+}
+/* 官方題目之解析為本站整理；nv＝涉及條號、金額、比例等細節，提醒對照最新法規 */
+function noteHtml(item) {
+  return '<div class="offexp"><b>解析</b><span class="nsrc">本站整理</span>　' + fmtTxt(item.note) + '</div>'
+    + (item.nv ? '<div class="nvnote">⚠️ 本解析涉及之條號、金額或比例係依當期法規整理，建議對照最新規定。</div>' : '');
 }
 function hasOptExp(item) { return item.exps && item.exps.some(function (x) { return x; }); }
 /* picked：使用者選項（null＝未作答，undefined＝不顯示作答） */
@@ -399,7 +404,8 @@ function vHome() {
   h += '<footer class="foot"><div class="disc"><b>資料來源與聲明：</b>'
     + '<div>題庫分三類 ─ 1. 官方歷屆試題（附官方標準答案）；2. 書籍題庫（依原書章節分類）；3. 依官方測驗範圍自編之詳解練習題（含逐選項解析）。</div>'
     + '<div class="i">考試制度依主辦單位最新電腦應試簡章設定（資料更新：' + esc(META.updated) + '）。</div>'
-    + '<div class="i">早期年份試題若涉及已修正法規，請以最新法規為準；實際規定以主辦單位公告為準。</div></div>';
+    + '<div class="i">官方歷屆試題之答案依主辦單位公布之正確答案；解析與主題分類為本站依測驗範圍整理，僅供學習參考。</div>'
+    + '<div class="i">早期試題若涉及已修正法規，請以最新法規為準；實際規定以主辦單位公告為準。</div></div>';
   (META.sources || []).forEach(function (s) { h += '<p>─ <a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.title) + '</a></p>'; });
   h += '</footer>';
   setHTML(h);

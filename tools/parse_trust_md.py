@@ -87,9 +87,42 @@ def parse_questions(text, expected):
 SUBJ = {'law': ('trust-law', '信託法規', 'TL'), 'prac': ('trust-prac', '信託實務', 'TP')}
 
 
+ANN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'annotations')
+
+
+def norm_key(q, opts):
+    return re.sub(r'\s', '', q)[:60] + '|' + re.sub(r'\s', '', '|'.join(opts))
+
+
+def load_annotations():
+    """讀取 tools/annotations/*.tsv（題號、主題代碼、解析、?＝細節待查證）與 topics.json。"""
+    topics = json.load(open(os.path.join(ANN_DIR, 'topics.json'), encoding='utf-8'))
+    ann = {}
+    for f in sorted(os.listdir(ANN_DIR)):
+        if f.endswith('.tsv'):
+            for line in open(os.path.join(ANN_DIR, f), encoding='utf-8'):
+                p = line.rstrip('\n').split('\t')
+                if len(p) >= 3:
+                    ann[p[0]] = {'code': p[1], 'note': p[2], 'nv': len(p) > 3 and p[3] == '?'}
+    return topics, ann
+
+
 def emit_js(papers, dst):
     """產生 data/bank-trust.js：題庫（官方歷屆題）＋整份歷屆試卷（以題號引用題庫，不重複存題目）。"""
     bank, plist = {'trust-law': [], 'trust-prac': []}, []
+    topics, ann = load_annotations()
+    # 解析只寫在每組重複題的其中一題，依題目內容套用到所有重複題
+    by_key, all_q = {}, []
+    for p in papers:
+        _, _, pre = SUBJ[p['subject']]
+        for q in p['questions']:
+            qid = '%s-OF-%02d-%02d' % (pre, p['period'], q['no'])
+            all_q.append((qid, norm_key(q['q'], q['options'])))
+            if qid in ann:
+                by_key[norm_key(q['q'], q['options'])] = ann[qid]
+    missing = [qid for qid, k in all_q if k not in by_key]
+    if missing:
+        print('⚠️  尚無解析與主題的題目 %d 題（將以期別為主題）：%s' % (len(missing), ', '.join(missing[:10])))
     for p in sorted(papers, key=lambda x: (-x['period'], x['subject'])):
         exam, name, pre = SUBJ[p['subject']]
         per, ids = p['period'], []
@@ -98,15 +131,22 @@ def emit_js(papers, dst):
                 continue
             qid = '%s-OF-%02d-%02d' % (pre, per, q['no'])
             ids.append(qid)
-            bank[exam].append({
-                'id': qid, 'exam': exam, 'subject': '', 'topic': '官方歷屆 ─ 第 %d 期' % per, 'kind': 'off',
+            a = by_key.get(norm_key(q['q'], q['options']))
+            item = {
+                'id': qid, 'exam': exam, 'subject': '',
+                'topic': topics[exam][a['code']] if a else '官方歷屆 ─ 第 %d 期' % per, 'kind': 'off',
                 'difficulty': 2, 'q': q['q'], 'options': q['options'], 'answer': q['answer'],
-                'explain': ['', '', '', ''], 'note': '',
-                'src': '第 %d 期信託業業務人員信託業務專業測驗｜%s 第 %d 題（金研院公布之試題與正確答案）' % (per, name, q['no'])})
+                'explain': ['', '', '', ''], 'note': a['note'] if a else '',
+                'src': '第 %d 期信託業業務人員信託業務專業測驗｜%s 第 %d 題（金研院公布之試題與正確答案）' % (per, name, q['no'])}
+            if a and a['nv']:
+                item['nv'] = 1
+            bank[exam].append(item)
         plist.append({'id': '%s-p%d' % (exam, per), 'exam': exam, 'examName': name, 'era': '信託業務專業測驗',
                       'sess': per, 'label': '第 %d 期' % per, 'qn': len(ids), 'qids': ids})
+    # 依測驗範圍主題順序排列（同主題內依期別、題號），題庫瀏覽與自訂練習的主題即依此順序呈現
     for k in bank:
-        bank[k].sort(key=lambda x: x['id'])
+        order = {v: i for i, v in enumerate(topics[k].values())}
+        bank[k].sort(key=lambda x: (order.get(x['topic'], 99), x['id']))
     with open(dst, 'w', encoding='utf-8') as f:
         f.write('/* 由 tools/parse_trust_md.py 產生（來源：信託考古題/*.md），請勿手動編輯 */\n')
         f.write('(function (B, P) {\n')
