@@ -21,7 +21,8 @@ index.html            頁面殼
 assets/style.css      樣式（藍色系）
 assets/app.js         主程式
 data/meta.js          考試規則設定（題數、時間、及格標準）
-data/bank.js          題庫（目前為示範題）
+data/bank.js          期貨題庫（目前為示範題）
+data/bank-trust.js    信託題庫（第 41～48 期官方歷屆試題）
 data/papers.js        歷屆整份試卷（目前為示範卷）
 firebase-config.js    Firebase 設定（留空＝不啟用登入）
 firestore.rules       Firestore 安全規則
@@ -44,6 +45,16 @@ python3 tools/convert_bank.py --papers 題庫/歷屆/*.xlsx
 ```
 
 題號請保持固定，收藏、錯題本與作答紀錄都靠題號對應。
+
+### 信託歷屆試題（金研院 .md 檔）
+
+`信託考古題/` 內每期一個資料夾（法規試題、實務試題、正確答案三個 .md），執行：
+
+```bash
+python3 tools/parse_trust_md.py 信託考古題
+```
+
+會重新產生 `data/bank-trust.js`（題庫＋整份歷屆試卷）。`信託考古題/` 原始檔不會上傳到 GitHub。
 
 ## 本機預覽
 

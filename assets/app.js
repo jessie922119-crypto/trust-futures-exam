@@ -78,16 +78,22 @@ function rawById(id) {
     _IDX = {};
     Object.keys(BANK).forEach(function (k) { BANK[k].forEach(function (q) { _IDX[q.id] = q; }); });
     PAPERS.forEach(function (p) {
-      p.questions.forEach(function (q, i) { _IDX[p.id + '#' + (i + 1)] = paperRaw(p, q, i); });
+      (p.questions || []).forEach(function (q, i) { _IDX[p.id + '#' + (i + 1)] = paperRaw(p, q, i); });
     });
   }
   return _IDX[id] || null;
 }
+/* 試卷題目：qids 引用題庫題號，或 questions 直接內嵌題目 */
 function paperRaw(p, q, i) {
-  return { id: p.id + '#' + (i + 1), exam: p.exam, subject: '', topic: '官方題庫 ─ ' + p.yCE + ' 年', kind: 'off', difficulty: 2,
+  return { id: p.id + '#' + (i + 1), exam: p.exam, subject: '', topic: '官方題庫 ─ ' + (p.yCE ? p.yCE + ' 年' : p.label), kind: 'off', difficulty: 2,
     q: q.q, options: q.options, answer: q.answer, explain: ['', '', '', ''], note: q.note || '',
-    src: p.examName + ' ' + p.label + '（民國 ' + p.yROC + ' 年／西元 ' + p.yCE + ' 年）' };
+    src: p.examName + ' ' + p.label + (p.yROC ? '（民國 ' + p.yROC + ' 年／西元 ' + p.yCE + ' 年）' : '') };
 }
+function paperQs(p) {
+  if (p.qids) return p.qids.map(rawById).filter(Boolean);
+  return p.questions.map(function (q, i) { return paperRaw(p, q, i); });
+}
+function paperGroup(p) { return p.era || ('民國 ' + p.yROC + ' 年（西元 ' + p.yCE + '）'); }
 
 /* 原始題目 → 作答用題目（可打散選項；perm[i] = 第 i 個顯示選項對應的原始索引） */
 function toItem(raw, keepOrder) {
@@ -302,7 +308,7 @@ function offNote(item) {
     h = '<div class="offnote">📋 本題出自<b>' + esc(String(item.subject || '').split('｜')[0] || '書籍題庫') + '</b>，綠色標示為<b>標準答案</b>。</div>';
   } else {
     h = '<div class="offnote">📋 本題為<b>官方歷屆試題</b>' + (y ? '（' + y + ' 年）' : '') + '，綠色標示為<b>官方標準答案</b>。'
-      + (y && +y < 2025 ? '<br><span class="ow">※ 早期年份試題若涉及已修正之法規數字，請以最新法規為準。</span>' : '') + '</div>';
+      + ((!y || +y < 2025) ? '<br><span class="ow">※ 答案依當期法規；若相關法規其後已修正，請以最新規定為準。</span>' : '') + '</div>';
   }
   if (item.note) h += '<div class="offexp"><b>解析</b>　' + fmtTxt(item.note) + '</div>';
   return h;
@@ -335,14 +341,18 @@ function tags(item) {
 }
 
 /* ================= 首頁 ================= */
-function isDemo() { return Object.keys(BANK).some(function (k) { return BANK[k].some(function (q) { return /^DEMO-/.test(q.id); }); }); }
+/* 仍只有示範題的科目 */
+function demoExams() {
+  return (META.exams || []).filter(function (e) { var b = bankOf(e.id); return b.length && b.every(function (q) { return /^DEMO-/.test(q.id); }); });
+}
 function vHome() {
   clearInterval(timerId); timerId = null; S = null; sheetOpen = false; NAV = []; setView('home');
   if (!META) { setHTML('<div class="panel" style="text-align:center"><h2>題庫建置中</h2><p class="notice">資料尚未載入，請稍後重新整理。</p></div>'); return; }
   var saved = store.get(KEY.ses, null), his = store.get(KEY.his, []), h = '';
   h += '<header class="brand"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><rect x="2" y="2" width="40" height="40" rx="8" fill="#1D4F91"/><text x="22" y="30" text-anchor="middle" font-size="21" font-weight="700" fill="#fff">測</text></svg>'
     + '<div><h1>' + esc(META.title) + '</h1><div class="sub">信託業業務人員信託業務專業測驗 ─ 期貨商業務員資格測驗｜電腦應試模擬</div></div></header>';
-  if (isDemo()) h += '<div class="demo-banner">🧪 目前為<b>示範題庫</b>（每科僅數題，用於展示功能），正式題庫匯入後此提示會自動消失。</div>';
+  var demo = demoExams();
+  if (demo.length) h += '<div class="demo-banner">🧪 <b>' + demo.map(function (e) { return esc(e.name); }).join('、') + '</b> 目前為示範題（每科僅數題，用於展示功能），正式題庫匯入後此提示會自動消失。</div>';
   if (saved && saved.qs && saved.qs.length) {
     var se = examById(saved.examId);
     h += '<div class="resume"><p>偵測到未完成的<b>《' + esc(saved.label || (se ? se.short : saved.examId)) + '》' + (saved.mode === 'mock' ? '模擬考' : '練習') + '</b>（已作答 '
@@ -488,17 +498,21 @@ function vPapers(id, tab, sub) {
     });
     h += '</div>';
   } else {
+    // 依年份（或 era 分組名稱）分組，新的在前
     var byY = {}, years = [];
-    ps.forEach(function (p) { if (!byY[p.yROC]) { byY[p.yROC] = []; years.push(p.yROC); } byY[p.yROC].push(p); });
-    years.sort(function (a, b) { return b - a; });
-    if (sub && years.indexOf(+sub) < 0) sub = '';
-    if (years.length) {
+    ps.slice().sort(function (a, b) { return (b.yROC || 0) - (a.yROC || 0) || (b.sess || 0) - (a.sess || 0); }).forEach(function (p) {
+      var g = paperGroup(p);
+      if (!byY[g]) { byY[g] = []; years.push(g); }
+      byY[g].push(p);
+    });
+    if (sub && years.indexOf(sub) < 0) sub = '';
+    if (years.length > 1) {
       h += '<div class="bankf sub"><button class="' + (sub ? '' : 'on') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="">全部（' + ps.length + '）</button>'
-        + years.map(function (y) { return '<button class="' + (+sub === y ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="' + y + '">民國 ' + y + ' 年（' + byY[y].length + '）</button>'; }).join('') + '</div>';
+        + years.map(function (y) { return '<button class="' + (sub === y ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="' + esc(y) + '">' + esc(y) + '（' + byY[y].length + '）</button>'; }).join('') + '</div>';
     }
     years.forEach(function (y) {
-      if (sub && +sub !== y) return;
-      if (!sub) h += '<div class="subhead">民國 ' + y + ' 年（西元 ' + (y + 1911) + '）</div>';
+      if (sub && sub !== y) return;
+      if (!sub) h += '<div class="subhead">' + esc(y) + '</div>';
       h += '<div class="plist">' + byY[y].map(function (p) {
         return '<button class="wrow" data-act="startPaper" data-paper="' + esc(p.id) + '"><span>' + esc(p.label) + (p.qn < e.qn ? ' <span class="ppartial">部分卷</span>' : '') + '</span><b class="num">' + p.qn + ' 題</b></button>';
       }).join('') + '</div>';
@@ -902,7 +916,8 @@ var ACT = {
   },
   startPaper: function (d) {
     var p = paperById(d.paper); if (!p) return;
-    var qs = p.questions.map(function (q, i) { return toItem(paperRaw(p, q, i), true); });
+    var qs = paperQs(p).map(function (q) { return toItem(q, true); });
+    if (!qs.length) return;
     makeSession(p.exam, 'mock', qs, { paper: p.id, label: p.examName + '｜' + p.label });
   },
   bookRand: function (d) {
