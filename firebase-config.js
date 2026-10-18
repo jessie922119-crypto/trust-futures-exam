@@ -4,10 +4,10 @@
  * 這組設定是公開的前端識別碼，不是密碼；資料安全由 firestore.rules 控管。
  */
 window.__FIREBASE__ = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyALrFKxFkPSvSduUPUd8SmPgnC_bsJUvW4",
+  authDomain: "trust-futures-exam.firebaseapp.com",
+  projectId: "trust-futures-exam",
+  storageBucket: "trust-futures-exam.firebasestorage.app",
+  messagingSenderId: "967353247284",
+  appId: "1:967353247284:web:47029688aedd2446e84c61"
 };
