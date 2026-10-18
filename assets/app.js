@@ -93,6 +93,10 @@ function paperQs(p) {
   if (p.qids) return p.qids.map(rawById).filter(Boolean);
   return p.questions.map(function (q, i) { return paperRaw(p, q, i); });
 }
+function paperRange(id) {
+  var n = papersOf(id).map(function (p) { return p.sess; }).filter(Boolean).sort(function (a, b) { return a - b; });
+  return n.length ? n[0] + '～' + n[n.length - 1] : '';
+}
 function paperGroup(p) { return p.era || ('民國 ' + p.yROC + ' 年（西元 ' + p.yCE + '）'); }
 
 /* 原始題目 → 作答用題目（可打散選項；perm[i] = 第 i 個顯示選項對應的原始索引） */
@@ -382,7 +386,7 @@ function vHome() {
         + '<div class="acts"><button class="btn btn-pri" data-act="intro" data-id="' + e.id + '"' + (bn ? '' : ' disabled') + '>模擬考</button>'
         + '<button class="btn btn-ghost" data-act="custom" data-id="' + e.id + '"' + (bn ? '' : ' disabled') + '>自訂練習</button>'
         + '<button class="btn btn-ghost" data-act="bankOpen" data-id="' + e.id + '"' + (bn ? '' : ' disabled') + '>題庫瀏覽</button>'
-        + (hasArchive ? '<button class="btn btn-ghost" data-act="papers" data-id="' + e.id + '">歷屆／書籍題庫 ▾</button>' : '')
+        + (hasArchive ? '<button class="btn btn-ghost" data-act="papers" data-id="' + e.id + '">' + (poolOf(e.id, 'book').length ? '歷屆／書籍題庫' : '官方歷屆試題') + ' ▾</button>' : '')
         + '<button class="btn btn-ghost" data-act="wrongMenu" data-id="' + e.id + '"' + (anyWrong ? '' : ' disabled') + '>錯題重練 ▾</button>'
         + '</div></div>';
     });
@@ -402,7 +406,8 @@ function vHome() {
   h += '<div class="backup"><h3>資料備份（跨裝置搬移）</h3><p>未登入時，紀錄只存在這台裝置的瀏覽器。登入 Google 即可自動雲端同步；也可以用備份檔手動搬移：</p>'
     + '<div class="bkacts"><button class="btn btn-ghost btn-sm" data-act="doExport">⬇ 匯出紀錄（下載備份檔）</button><button class="btn btn-ghost btn-sm" data-act="doImport">⬆ 匯入紀錄（讀取備份檔）</button></div></div>';
   h += '<footer class="foot"><div class="disc"><b>資料來源與聲明：</b>'
-    + '<div>題庫分三類 ─ 1. 官方歷屆試題（附官方標準答案）；2. 書籍題庫（依原書章節分類）；3. 依官方測驗範圍自編之詳解練習題（含逐選項解析）。</div>'
+    + '<div>信託業務專業測驗：題目全部為金研院公布之官方歷屆試題（附官方正確答案），官方送分、一題多解或已刪除之題目不納入。</div>'
+    + '<div>期貨商業務員：題庫建置中（目前為示範題）。</div>'
     + '<div class="i">考試制度依主辦單位最新電腦應試簡章設定（資料更新：' + esc(META.updated) + '）。</div>'
     + '<div class="i">官方歷屆試題之答案依主辦單位公布之正確答案；解析與主題分類為本站依測驗範圍整理，僅供學習參考。</div>'
     + '<div class="i">早期試題若涉及已修正法規，請以最新法規為準；實際規定以主辦單位公告為準。</div></div>';
@@ -431,7 +436,10 @@ function vIntro(id) {
     + '<dt>計算器</dt><dd>' + esc(e.calc) + '</dd>'
     + (e.scope ? '<dt>測驗範圍</dt><dd>' + esc(e.scope) + '</dd>' : '')
     + '<dt>備註</dt><dd>' + esc(e.passNote) + '</dd></dl>';
-  if (off.length || book.length) {
+  var allN = bankOf(id).length, onlyOff = off.length === allN;
+  if (onlyOff) {
+    h += '<div class="flabel">題目來源</div><p class="srcnote"><b>官方歷屆試題</b>：共 ' + off.length + ' 題（第 ' + paperRange(id) + ' 期），附金研院公布之正確答案。</p>';
+  } else if (off.length || book.length) {
     h += '<div class="flabel">題目來源</div><div class="seg" id="segSrc"><button class="on" data-act="setSrc" data-s="all">全部題庫</button>'
       + (off.length ? '<button data-act="setSrc" data-s="off">僅官方歷屆試題</button>' : '')
       + (book.length ? '<button data-act="setSrc" data-s="book">僅' + esc(e.bookName || '書籍題庫') + '</button>' : '') + '</div>'
@@ -463,7 +471,7 @@ function vCustom(id) {
   var h = '<div class="panel ' + hueCls(e) + '"><span class="ebadge">' + esc(e.badge) + '</span><h2>自訂練習｜' + esc(e.short) + '</h2>'
     + '<p class="admin">不計時 ─ 每題作答後立即顯示解析，適合分主題複習（題庫共 ' + pool.length + ' 題）</p>'
     + '<div class="flabel">練習題數</div><div class="seg" id="segN">'
-    + [10, 20, 30, 50].map(function (n) { return '<button data-act="setN" data-n="' + n + '"' + (n === 20 ? ' class="on"' : '') + '>' + n + ' 題</button>'; }).join('')
+    + [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (n) { return '<button data-act="setN" data-n="' + n + '"' + (n === 20 ? ' class="on"' : '') + '>' + n + ' 題</button>'; }).join('')
     + '<button data-act="setN" data-n="0">全部範圍</button></div>'
     + '<div class="flabel">題目順序</div><div class="seg" id="segO"><button class="on" data-act="setOrd" data-o="0">隨機打散</button><button data-act="setOrd" data-o="1">照原本順序（含選項）</button></div>'
     + '<div class="flabel">練習範圍（不選＝全部主題）</div>';
@@ -482,9 +490,9 @@ function vPapers(id, tab, sub) {
   if (tab === 'book' && !hasBook) tab = 'off';
   sub = sub || '';
   var totBook = chaps.reduce(function (s, c) { return s + c.n; }, 0);
-  var h = '<div class="panel ' + hueCls(e) + '"><span class="ebadge">' + esc(e.badge) + '</span><h2>歷屆／書籍題庫 ─ ' + esc(e.short) + '</h2><div class="bankf">'
+  var h = '<div class="panel ' + hueCls(e) + '"><span class="ebadge">' + esc(e.badge) + '</span><h2>' + (hasBook ? '歷屆／書籍題庫' : '官方歷屆試題') + ' ─ ' + esc(e.short) + '</h2><div class="bankf">'
     + (hasBook ? '<button class="' + (tab === 'book' ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="book">📚 ' + esc(e.bookName || '書籍題庫') + '（' + totBook + '）</button>' : '')
-    + '<button class="' + (tab === 'off' ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off">📄 歷屆考題（' + ps.length + ' 份）</button></div>';
+    + (hasBook ? '<button class="' + (tab === 'off' ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off">📄 歷屆考題（' + ps.length + ' 份）</button>' : '<span class="mkhint">共 ' + ps.length + ' 份整卷，依官方題序作答，題數與時間比照正式考試。</span>') + '</div>';
   if (tab === 'book') {
     var books = [], bn = {};
     chaps.forEach(function (c) { if (bn[c.subject] == null) { bn[c.subject] = 0; books.push(c.subject); } bn[c.subject] += c.n; });
@@ -514,13 +522,15 @@ function vPapers(id, tab, sub) {
     if (sub && years.indexOf(sub) < 0) sub = '';
     if (years.length > 1) {
       h += '<div class="bankf sub"><button class="' + (sub ? '' : 'on') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="">全部（' + ps.length + '）</button>'
-        + years.map(function (y) { return '<button class="' + (sub === y ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="' + esc(y) + '">' + esc(y) + '（' + byY[y].length + '）</button>'; }).join('') + '</div>';
+        + years.map(function (y) { return '<button class="' + (sub === y ? 'on' : '') + '" data-act="pTab" data-id="' + id + '" data-tab="off" data-sub="' + esc(y) + '">' + esc(y.replace(/^民國 /, '').replace(/（西元 \d+）/, '').replace(/（試題未標示年份）/, '')) + '（' + byY[y].length + '）</button>'; }).join('') + '</div>';
     }
     years.forEach(function (y) {
       if (sub && sub !== y) return;
       if (!sub) h += '<div class="subhead">' + esc(y) + '</div>';
       h += '<div class="plist">' + byY[y].map(function (p) {
-        return '<button class="wrow" data-act="startPaper" data-paper="' + esc(p.id) + '"><span>' + esc(p.label) + (p.qn < e.qn ? ' <span class="ppartial">部分卷</span>' : '') + '</span><b class="num">' + p.qn + ' 題</b></button>';
+        var tip = (p.dropped || []).map(function (d) { return '第 ' + d.no + ' 題：' + d.why; }).join('；');
+        return '<button class="wrow" data-act="startPaper" data-paper="' + esc(p.id) + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '><span>' + esc(p.label)
+          + (p.dropped ? ' <span class="ppartial">已排除 ' + p.dropped.length + ' 題（官方送分或刪除）</span>' : (p.qn < e.qn ? ' <span class="ppartial">部分卷</span>' : '')) + '</span><b class="num">' + p.qn + ' 題</b></button>';
       }).join('') + '</div>';
     });
     if (!ps.length) h += '<div class="mempty">目前尚無此科目的歷屆整份試卷。</div>';

@@ -26,7 +26,7 @@ def clean(s):
 
 def role_of(text):
     head = text[:1500]
-    if '試題正確答案' in head or '正確答案' in head[:600]:
+    if '試題正確答案' in head or '正確答案' in head[:600] or ('節次' in head[:600] and '題號' in head or '節次' in head[:300]):
         return 'ans'
     if re.search(r'科目：\s*信託法規', head):
         return 'law'
@@ -46,6 +46,70 @@ def parse_answers(text):
         out[key] = {int(n): a for n, a in re.findall(r'(\d{1,2})\.【([^】]*)】', p)}
     return out
 
+
+def parse_answer_table(text):
+    """第 50 期起之答案為表格：「題號  法規答案  實務答案」，51～80 題只有實務一欄。
+    特殊值（如「1或4」「更正為2」「本題無正確答案，凡作答一律給分」）保留原字串。"""
+    out = {'law': {}, 'prac': {}}
+    for line in text.splitlines():
+        m = re.match(r'^\s*(\d{1,2})\s{2,}(.+?)\s*$', line)
+        if not m:
+            continue
+        n, rest = int(m.group(1)), m.group(2)
+        vals = re.split(r'\s{2,}', rest)
+        if n <= 50 and len(vals) >= 2:
+            out['law'][n], out['prac'][n] = vals[0], vals[1]
+        elif n <= 50 and len(vals) == 1 and n not in out['law']:
+            out['law'][n] = vals[0]
+        elif len(vals) == 1:
+            out['prac'][n] = vals[0]
+    # 「更正為2」→ 2
+    for k in out:
+        for n, v in out[k].items():
+            m = re.fullmatch(r'更正為\s*([1-4])', v)
+            if m:
+                out[k][n] = m.group(1)
+    return out
+
+
+def exam_year(text):
+    """答案檔「疑義期間：請於 109年7月…」→ 民國年（試題疑義於考後數日內受理，與考試同年）。"""
+    m = re.search(r'(1[01]\d)\s*年\s*\d{1,2}\s*月', text)
+    return int(m.group(1)) if m else None
+
+
+FOOTER = re.compile(r'【請接續背面】|【背面尚有試題】|【請翻頁】|以下空白')
+
+
+def unwrap_two_columns(text):
+    """第 50 期起試卷為左右兩欄，.md 每行混有左右欄文字。轉檔時右欄固定從同一字元位置開始，
+    故以每頁右欄題號的起始位置為分界，切成左欄、右欄後依「每頁左欄 → 右欄」排序。"""
+    pages = re.split(r'<!--\s*第\s*\d+\s*頁\s*-->', text)
+    out = []
+    for page in pages:
+        lines = [FOOTER.sub('', l.rstrip()) for l in page.splitlines()]
+        starts = [m.start(1) for l in lines for m in re.finditer(r'(?:^|  )(\d{1,2}\.)(?!\d)', l) if m.start(1) >= 30]
+        if not starts:
+            out += lines
+            continue
+        S = min(starts)
+        L, R = [], []
+        for l in lines:
+            if not l.strip() or re.fullmatch(r'\s*-{3,}\s*', l):
+                continue
+            cut = None
+            for m in re.finditer(r'(?:^|  )(\S)', l):
+                if m.start(1) >= S - 2:
+                    cut = m.start(1)
+                    break
+            if cut is None:
+                L.append(l)
+            else:
+                if l[:cut].strip():
+                    L.append(l[:cut])
+                R.append(l[cut:])
+        out += L + R
+    return '\n'.join(out)
 
 def parse_questions(text, expected):
     lines = [l for l in text.splitlines() if not PAGE.match(l)]
@@ -107,10 +171,20 @@ def load_annotations():
     return topics, ann
 
 
+def load_excluded():
+    """tools/annotations/excluded.tsv：官方送分、一題多解或已刪除停用之題目（題號<TAB>原因），不納入題庫與試卷。"""
+    path = os.path.join(ANN_DIR, 'excluded.tsv')
+    if not os.path.exists(path):
+        return {}
+    return dict(l.rstrip('\n').split('\t', 1) for l in open(path, encoding='utf-8') if '\t' in l)
+
+
 def emit_js(papers, dst):
     """產生 data/bank-trust.js：題庫（官方歷屆題）＋整份歷屆試卷（以題號引用題庫，不重複存題目）。"""
     bank, plist = {'trust-law': [], 'trust-prac': []}, []
     topics, ann = load_annotations()
+    excluded = load_excluded()
+    y_of = {p['period']: p.get('year') for p in papers}
     # 解析只寫在每組重複題的其中一題，依題目內容套用到所有重複題
     by_key, all_q = {}, []
     for p in papers:
@@ -125,11 +199,12 @@ def emit_js(papers, dst):
         print('⚠️  尚無解析與主題的題目 %d 題（將以期別為主題）：%s' % (len(missing), ', '.join(missing[:10])))
     for p in sorted(papers, key=lambda x: (-x['period'], x['subject'])):
         exam, name, pre = SUBJ[p['subject']]
-        per, ids = p['period'], []
+        per, ids, dropped = p['period'], [], []
         for q in p['questions']:
-            if q['answer'] is None:
-                continue
             qid = '%s-OF-%02d-%02d' % (pre, per, q['no'])
+            if q['answer'] is None or qid in excluded:
+                dropped.append({'no': q['no'], 'why': excluded.get(qid) or '官方答案：%s' % q.get('ansRaw', '')})
+                continue
             ids.append(qid)
             a = by_key.get(norm_key(q['q'], q['options']))
             item = {
@@ -140,9 +215,19 @@ def emit_js(papers, dst):
                 'src': '第 %d 期信託業業務人員信託業務專業測驗｜%s 第 %d 題（金研院公布之試題與正確答案）' % (per, name, q['no'])}
             if a and a['nv']:
                 item['nv'] = 1
+            if y_of.get(per):
+                item['src'] = item['src'].replace('（金研院', '（民國 %d 年，金研院' % y_of[per])
             bank[exam].append(item)
-        plist.append({'id': '%s-p%d' % (exam, per), 'exam': exam, 'examName': name, 'era': '信託業務專業測驗',
-                      'sess': per, 'label': '第 %d 期' % per, 'qn': len(ids), 'qids': ids})
+        y = p.get('year')
+        pp = {'id': '%s-p%d' % (exam, per), 'exam': exam, 'examName': name, 'sess': per,
+              'label': '第 %d 期' % per, 'qn': len(ids), 'qids': ids}
+        if y:
+            pp.update(yROC=y, yCE=y + 1911)
+        else:
+            pp['era'] = '第 41～47 期（試題未標示年份）'
+        if dropped:
+            pp['dropped'] = dropped
+        plist.append(pp)
     # 依測驗範圍主題順序排列（同主題內依期別、題號），題庫瀏覽與自訂練習的主題即依此順序呈現
     for k in bank:
         order = {v: i for i, v in enumerate(topics[k].values())}
@@ -174,8 +259,14 @@ def main(root, dst):
             report.append('第 %s 期：檔案不齊全（找到 %s）' % (d, sorted(files)))
             continue
         ans = parse_answers(files['ans'])
+        if not any(ans.values()):
+            ans = parse_answer_table(files['ans'])
+        year = exam_year(files['ans'])
         for key, expected in (('law', 50), ('prac', 80)):
-            qs, problems, missing = parse_questions(files[key], expected)
+            src = files[key]
+            if len(re.findall(r'(?m)(?:^|  )\d{1,2}\.(?!\d)', src)) and sum(1 for m in re.finditer(r'(?m)^(.*?  )\d{1,2}\.(?!\d)', src) if len(m.group(1)) >= 30) >= 3:
+                src = unwrap_two_columns(src)
+            qs, problems, missing = parse_questions(src, expected)
             a = ans.get(key, {})
             items = []
             for i in range(1, expected + 1):
@@ -194,7 +285,7 @@ def main(root, dst):
                 d, '法規' if key == 'law' else '實務', len(qs), expected, len(a), missing or '無', len(problems)))
             for pr in problems:
                 report.append('    ⚠️ 第 %s 題：%s ─ %s' % pr)
-            papers.append({'period': int(d), 'subject': key, 'questions': items})
+            papers.append({'period': int(d), 'year': year, 'subject': key, 'questions': items})
     print('\n'.join(report))
     if dst.endswith('.js'):
         emit_js(papers, dst)
