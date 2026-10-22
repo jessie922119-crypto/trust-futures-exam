@@ -733,3 +733,15 @@ details.more .rules{margin-top:8px}
 @media (max-width:900px){.brand-art .bubble{top:28px;max-width:48%}.brand .brand-paco{width:128px}}
 .brand h1 .t1{white-space:nowrap}
 @media (max-width:900px){.brand-main{padding-top:62px}}
+/* 作答回饋的小 Paco（不加對話） */
+.verdict-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.verdict-row .verdict{margin:0}
+.v-paco{width:46px;flex:none;animation:pacoPop .45s ease-out}
+/* 標記題直接作答 */
+.fcard .opts{margin-top:4px}
+.fcard .opt{padding:10px 14px;font-size:14.5px}
+.fcard .fb{margin-top:12px}
+.fst{font-size:11.5px;font-weight:800;border-radius:999px;padding:0 9px}
+.fst.no{background:var(--bad-soft);color:var(--bad)}
+.fst.yes{background:var(--ok-soft);color:var(--ok)}
+.fcard .ovx{margin-right:8px}

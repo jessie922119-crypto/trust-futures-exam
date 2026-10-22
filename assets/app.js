@@ -699,7 +699,7 @@ function vExam() {
   h += '</div>';
   if (revealed) {
     var hit = S.picked[S.idx] === q.ans;
-    h += '<div class="fb"><div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(q.ans)) + '</div>'
+    h += '<div class="fb">' + verdictHtml(hit, q.ans)
       + '<div class="fbnav"><button class="btn btn-ghost btn-sm" data-act="retryQ">🔁 當題重新作答</button><span class="sp"></span>'
       + (S.idx === S.total - 1 ? '<button class="btn btn-pri btn-sm" data-act="submitAsk">結束並看結果 →</button>' : '<button class="btn btn-pri btn-sm" data-act="next">下一題 →</button>') + '</div>';
     if (hasOptExp(q)) {
@@ -902,6 +902,40 @@ function practBox(act, attrs, total) {
 function pickN(list) { list = shuffle(list); return practN ? list.slice(0, practN) : list; }
 
 /* ================= 標記（考試中不確定、待檢查的題目） ================= */
+/* 標記題卡片：未交卷時可直接在這裡作答（不必逐題「跳到此題」） */
+function verdictHtml(hit, ansIdx) {
+  return '<div class="verdict-row">' + paco(hit ? 'happy' : 'thumb', 'v-paco') + '<div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(ansIdx)) + '</div></div>';
+}
+function flagCards(src, inExam) {
+  var e = examById(src.examId), h = '';
+  curFlags(src).forEach(function (i) {
+    var q = src.qs[i], pk = src.picked[i], practice = src.mode === 'practice', revealed = src.done || (practice && src.shown[i]);
+    h += '<div class="ovcard fcard ' + hueCls(e) + '"><div class="ovhead"><span class="mbadge">第 ' + (i + 1) + ' 題</span>' + tags(q)
+      + '<span class="fst ' + (pk == null ? 'no' : 'yes') + '">' + (pk == null ? '未作答' : '已作答') + '</span><span class="sp"></span>'
+      + (src.done ? '' : '<button class="ovx" data-act="flagOff" data-q="' + i + '">取消標記</button>') + (inExam && !src.done ? '<button class="ovgo" data-act="flagJump" data-i="' + i + '">跳到此題 →</button>' : '') + '</div>'
+      + '<p class="ovq">' + esc(q.q) + '</p>';
+    if (src.done) h += optionRows(q, pk, true);
+    else {
+      h += '<div class="opts">';
+      for (var j = 0; j < 4; j++) {
+        var cls = 'opt';
+        if (revealed) { if (j === q.ans) cls += ' is-ans'; else if (pk === j) cls += ' is-wrong'; }
+        else if (pk === j) cls += ' sel';
+        h += '<button class="' + cls + '" data-act="flagPick" data-q="' + i + '" data-o="' + j + '"' + (revealed ? ' disabled' : '') + '><span class="k">' + L(j) + '</span><span>' + esc(q.opts[j]) + '</span></button>';
+      }
+      h += '</div>';
+      if (revealed) h += '<div class="fb">' + verdictHtml(pk === q.ans, q.ans) + (hasOptExp(q) ? '' : offNote(q)) + '</div>';
+    }
+    h += '</div>';
+  });
+  return h;
+}
+function refreshFlags() {
+  var ov = document.getElementById('movl');
+  if (ov && !ov.hidden) { var b = document.getElementById('movlBody'), y = b.scrollTop; openFlags(); b.scrollTop = y; }
+  else if (curView === 'flags') { var wy = window.scrollY; vFlags(); window.scrollTo(0, wy); }
+  updateFab();
+}
 function vFlags() {
   NAV = [];
   var src = flagSrc(), fl = curFlags(src), e = src ? examById(src.examId) : null;
@@ -913,12 +947,8 @@ function vFlags() {
   var title = src.label || (e ? e.short : '');
   h += '<div class="mkact"><span class="flsrc"><b>' + esc(title) + '</b>　' + (src.done ? '已交卷' : '作答中（已作答 ' + src.picked.filter(function (p) { return p != null; }).length + '／' + src.total + '）') + '・標記 ' + fl.length + ' 題</span><span class="sp"></span>'
     + (src.done ? '<button class="btn btn-ghost" data-act="toResults">回成績單</button>' : '<button class="btn btn-pri" data-act="resume">回到作答</button>') + '</div>';
-  fl.forEach(function (i) {
-    var q = src.qs[i], show = src.done || (src.mode === 'practice' && src.shown[i]);
-    h += '<div class="ovcard ' + hueCls(e) + '"><div class="ovhead"><span class="mbadge">第 ' + (i + 1) + ' 題</span>' + tags(q) + '<span class="sp"></span>' + markBtn(q.id, 'markId') + '</div>'
-      + '<p class="ovq">' + esc(q.q) + '</p>' + optionRows(q, src.picked[i], show) + '</div>';
-  });
-  if (!src.done) h += '<p class="mhint">測驗尚未交卷，暫不顯示正確答案。</p>';
+  if (!src.done) h += '<p class="mhint">可以直接在這裡作答標記的題目，答案會同步到原本的測驗' + (src.mode === 'mock' ? '（模擬考交卷前不顯示正確答案；計時仍在進行）' : '') + '。</p>';
+  h += flagCards(src, false);
   setHTML(h); setView('flags', {});
 }
 
@@ -1103,17 +1133,8 @@ function updateFab() {
 function openFlags() {
   var fl = curFlags(), body = document.getElementById('movlBody'), h;
   document.getElementById('movlTitle').textContent = '🚩 標記（待檢查）' + (fl.length ? '　' + fl.length + ' 題' : '');
-  if (!fl.length) h = '<div class="mempty">目前沒有標記待檢查的題目。<br>作答時按題目右上角的「🚩 標記」（或鍵盤 F），題目就會列在這裡，方便<b>交卷前逐題複查</b>。</div>';
-  else {
-    var showAns = S.mode !== 'mock' || S.done;
-    h = '<div class="mhint">本次共標記 ' + fl.length + ' 題' + (showAns ? '' : '（測驗進行中，暫不顯示正確答案）') + '，可按「跳到此題」回去作答。</div>';
-    fl.forEach(function (i) {
-      var q = S.qs[i];
-      h += '<div class="ovcard"><div class="ovhead"><span class="mbadge">第 ' + (i + 1) + ' 題</span>' + tags(q) + '<span class="sp"></span>'
-        + (S.done ? '' : '<button class="ovgo" data-act="flagJump" data-i="' + i + '">跳到此題 →</button>') + '</div>'
-        + '<p class="ovq">' + esc(q.q) + '</p>' + optionRows(q, S.picked[i], showAns && (S.mode !== 'practice' || S.shown[i] || S.done)) + '</div>';
-    });
-  }
+  if (!fl.length) h = '<div class="mempty">' + pacoSay('study', '目前沒有標記的題目。作答時按題目右上角的「🚩 標記」（或鍵盤 F），題目就會列在這裡，交卷前可以一次複查、直接作答。', 'empty-say') + '</div>';
+  else h = '<div class="mhint">本次共標記 ' + fl.length + ' 題，可以直接在這裡作答' + (S.mode === 'mock' && !S.done ? '（交卷前不顯示正確答案）' : '') + '。</div>' + flagCards(S, true);
   body.innerHTML = h; body.scrollTop = 0;
   document.getElementById('movl').hidden = false;
 }
@@ -1355,7 +1376,22 @@ var ACT = {
     var c = document.getElementById('mkCnt'); if (c) c.textContent = getMarks().length;
   },
   openFlags: function () { openFlags(); },
-  closeFlags: function () { document.getElementById('movl').hidden = true; },
+  closeFlags: function () { document.getElementById('movl').hidden = true; if (curView === 'exam' && S && !S.done) vExam(); },
+  flagPick: function (d) {
+    var src = flagSrc(); if (!src || src.done) return;
+    if (src.mode === 'mock' && Date.now() >= src.deadline) { if (src !== S) S = src; return submit(true); }
+    var i = +d.q, o = +d.o;
+    if (src.mode === 'practice') { if (src.shown[i]) return; src.picked[i] = o; src.shown[i] = true; }
+    else src.picked[i] = src.picked[i] === o ? null : o;
+    if (src === S) saveSession(); else store.set(KEY.ses, src);
+    refreshFlags();
+  },
+  flagOff: function (d) {
+    var src = flagSrc(); if (!src || src.done) return;
+    src.flags[+d.q] = false;
+    if (src === S) saveSession(); else store.set(KEY.ses, src);
+    refreshFlags();
+  },
   flagJump: function (d) { document.getElementById('movl').hidden = true; S.idx = +d.i; sheetOpen = false; saveSession(); vExam(); },
 
   modalClose: function () { closeModal(); },
