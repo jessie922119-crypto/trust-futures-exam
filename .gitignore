@@ -3,3 +3,5 @@
 __pycache__/
 信託考古題/
 期貨考古題/
+.playwright-mcp/
+docs/design-demo/
