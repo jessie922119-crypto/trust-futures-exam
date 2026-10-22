@@ -71,6 +71,16 @@ var PACO_HEAD = '<svg class="paco-head" viewBox="0 0 64 64" aria-hidden="true">'
   + '<path d="M28 44 Q32 47 36 44" fill="none" stroke="#2E2A2A" stroke-width="2" stroke-linecap="round"/>'
   + '<circle cx="18" cy="42" r="3.6" fill="#F3A99E" opacity=".85"/><circle cx="46" cy="42" r="3.6" fill="#F3A99E" opacity=".85"/></svg>';
 
+/* 線條圖示（導航列與頁首共用） */
+function svgI(p) { return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>'; }
+var ICON = {
+  star: svgI('<path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6l-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/>'),
+  wrong: svgI('<path d="M6.5 3.5H17a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8.5 3.5v17"/><path d="M11.5 9.5l4.5 4.5M16 9.5L11.5 14"/>'),
+  flag: svgI('<path d="M5.5 21V4"/><path d="M5.5 4.8c4.2-2.2 7.3 2.2 12.5 0v8.4c-5.2 2.2-8.3-2.2-12.5 0"/>'),
+  map: svgI('<path d="M3.5 6.6L9 4.2l6 2.4 5.5-2.4v13.2L15 19.8l-6-2.4-5.5 2.4z"/><path d="M9 4.2v13.2M15 6.6v13.2"/>'),
+  chart: svgI('<path d="M4 4v15.5h16"/><path d="M7.5 14.5l3.5-4 3 2.5 4.5-6"/><circle cx="18.5" cy="7" r=".6" fill="currentColor"/>')
+};
+
 /* ================= 學習足跡（學習地圖用） ================= */
 /* seen[id] = [作答次數, 答對次數, 最後作答(秒)]；papers[id] = { b: 最佳, l: 最近, n: 次數, t: 時間 } */
 function bumpSeen(s, id, ok, ts) {
@@ -376,7 +386,7 @@ function submit(auto) {
 
 /* ================= 導覽（回上一頁） ================= */
 var NAV = [], curView = 'home', curArgs = {};
-function setView(v, a) { curView = v; curArgs = a || {}; renderAcct(); updateFab(); }
+function setView(v, a) { curView = v; curArgs = a || {}; renderAcct(); updateFab(); navShow(!(v === 'exam' && window.innerWidth <= 900)); }
 function pushNav() { NAV.push({ v: curView, a: curArgs }); if (NAV.length > 30) NAV.shift(); }
 function navBack() {
   var p = NAV.pop();
@@ -426,13 +436,17 @@ function goFrom(fr) {
 function pageHead(title, sub, pose) {
   return '<header class="phead">' + (pose ? paco(pose, 'phead-paco') : '') + '<div><h2>' + title + '</h2>' + (sub ? '<p>' + sub + '</p>' : '') + '</div></header>';
 }
+function mapTabs(cur, id) {
+  return '<div class="ptabs"><button class="' + (cur === 'map' ? 'on' : '') + '" data-act="mapTab" data-id="' + esc(id || '') + '">' + ICON.map + '學習路線</button>'
+    + '<button class="' + (cur === 'scores' ? 'on' : '') + '" data-act="scTab" data-id="' + esc(id || '') + '">' + ICON.chart + '成績單</button></div>';
+}
 function examTabs(act, cur, counter) {
   return '<div class="bankf etabs">' + META.exams.map(function (e) {
     var c = counter ? counter(e.id) : null;
     return '<button class="' + (e.id === cur ? 'on' : '') + '" data-act="' + act + '" data-id="' + e.id + '">' + esc(e.short) + (c != null ? '（' + c + '）' : '') + '</button>';
   }).join('') + '</div>';
 }
-function setHTML(h) { app.innerHTML = h; window.scrollTo(0, 0); updateFab(); renderAcct(); }
+function setHTML(h) { app.innerHTML = h; window.scrollTo(0, 0); lastY = 0; updateFab(); renderAcct(); }
 function backBar(title, extra) {
   return '<div class="pagebar"><button class="btn btn-ghost btn-sm" data-act="back">← 回上一頁</button><b>' + title + '</b><span class="sp"></span>'
     + (extra || '') + '<button class="btn btn-ghost btn-sm" data-act="home">回首頁</button></div>';
@@ -440,15 +454,10 @@ function backBar(title, extra) {
 
 /* ================= 題目卡片（檢討／收藏／題庫瀏覽共用） ================= */
 function offNote(item) {
-  var y = (String(item.topic || '').match(/(\d{4})\s*年/) || [])[1], h;
-  if (item.kind === 'book') {
-    h = '<div class="offnote">📋 本題出自<b>' + esc(String(item.subject || '').split('｜')[0] || '書籍題庫') + '</b>，綠色標示為<b>標準答案</b>。</div>';
-  } else {
-    h = '<div class="offnote">📋 本題為<b>官方歷屆試題</b>' + (y ? '（' + y + ' 年）' : '') + '，綠色標示為<b>官方標準答案</b>。'
-      + ((!y || +y < 2025) ? '<br><span class="ow">※ 答案依當期法規；若相關法規其後已修正，請以最新規定為準。</span>' : '') + '</div>';
-  }
-  if (item.note) h += noteHtml(item);
-  return h;
+  var y = (String(item.topic || '').match(/(\d{4})\s*年/) || [])[1], meta;
+  if (item.kind === 'book') meta = '本題出自' + esc(String(item.subject || '').split('｜')[0] || '書籍題庫') + '，綠色標示為標準答案。';
+  else meta = '本題為官方歷屆試題' + (y ? '（' + y + ' 年）' : '') + '，綠色標示為官方標準答案。' + ((!y || +y < 2025) ? '答案依當期法規；若相關法規其後已修正，請以最新規定為準。' : '');
+  return (item.note ? noteHtml(item) : '') + '<div class="qmeta">備註：' + meta + (item.src ? '<br>依據：' + fmtTxt(item.src) : '') + '</div>';
 }
 /* 官方題目之解析為本站整理；nv＝涉及條號、金額、比例等細節，提醒對照最新法規 */
 function noteHtml(item) {
@@ -470,8 +479,7 @@ function optionRows(item, picked, showAns) {
       + '</div></div>';
   }
   if (showAns && !hasOptExp(item)) h += offNote(item);
-  else if (showAns && item.note) h += '<div class="offexp"><b>解析</b>　' + fmtTxt(item.note) + '</div>';
-  if (showAns && item.src) h += '<div class="src">依據：' + fmtTxt(item.src) + '</div>';
+  else if (showAns) h += (item.note ? '<div class="offexp"><b>解析</b>　' + fmtTxt(item.note) + '</div>' : '') + (item.src ? '<div class="qmeta">依據：' + fmtTxt(item.src) + '</div>' : '');
   return h;
 }
 function markBtn(id, act, extra) {
@@ -492,10 +500,14 @@ function vHome() {
   clearInterval(timerId); timerId = null; S = null; sheetOpen = false; NAV = []; setView('home');
   if (!META) { setHTML('<div class="panel" style="text-align:center"><h2>題庫建置中</h2><p class="notice">資料尚未載入，請稍後重新整理。</p></div>'); return; }
   var saved = store.get(KEY.ses, null), his = store.get(KEY.his, []), h = '';
-  h += '<header class="brand"><span class="brand-badge">' + PACO_HEAD + '</span>'
-    + '<div class="brand-txt"><h1>' + esc(META.title) + '</h1><div class="sub">信託業業務人員信託業務專業測驗 ─ 期貨商業務員資格測驗｜電腦應試模擬</div>'
-    + '<div class="brand-say"><b>Paco：</b>' + esc(PACO_TIPS[new Date().getDate() % PACO_TIPS.length]) + '</div></div>'
-    + paco('wave', 'brand-paco') + '</header>';
+  var real = META.exams.filter(function (e) { return demoExams().indexOf(e) < 0; }), nQ = 0, nP = 0, tps = {};
+  real.forEach(function (e) { nQ += bankOf(e.id).length; nP += papersOf(e.id).length; bankOf(e.id).forEach(function (q) { tps[e.id + q.topic] = 1; }); });
+  var tl = String(META.title), cut = tl.indexOf('證照');
+  h += '<header class="brand"><div class="brand-main"><div class="eyebrow"><span class="brand-badge">' + PACO_HEAD + '</span>TRUST & FUTURES　電腦應試模擬</div>'
+    + '<h1>' + (cut > 0 ? '<span class="t1">' + esc(tl.slice(0, cut)) + '</span><em>' + esc(tl.slice(cut)) + '</em>' : esc(tl)) + '</h1>'
+    + '<p class="sub">信託業業務人員信託業務專業測驗・期貨商業務員資格測驗</p>'
+    + '<div class="bstats"><div><b class="num">' + nQ.toLocaleString() + '</b><span>官方歷屆試題</span></div><div><b class="num">' + nP + '</b><span>份整卷</span></div><div><b class="num">' + Object.keys(tps).length + '</b><span>章節分類</span></div></div></div>'
+    + '<div class="brand-art"><div class="bubble">' + esc(PACO_TIPS[new Date().getDate() % PACO_TIPS.length]) + '</div>' + paco('wave', 'brand-paco') + '<span class="art-tag">STUDY WITH PACO</span></div></header>';
   var demo = demoExams();
   if (demo.length) h += '<div class="demo-banner">🧪 <b>' + demo.map(function (e) { return esc(e.name); }).join('、') + '</b> 目前為示範題（每科僅數題，用於展示功能），正式題庫匯入後此提示會自動消失。</div>';
   if (saved && saved.qs && saved.qs.length) {
@@ -669,12 +681,10 @@ function sessionMode() {
 function vExam() {
   var e = examById(S.examId), q = S.qs[S.idx], mock = S.mode === 'mock';
   var revealed = !mock && S.shown[S.idx];
-  var nfl = curFlags().length;
   var h = '<div class="' + hueCls(e) + '"><div class="exam-top"><button class="btn btn-ghost btn-sm xback" data-act="examBack" title="返回上一頁（會先確認）">← 返回</button>'
     + '<span class="ttl">' + esc(sessionTitle()) + '</span><span class="mode">' + esc(sessionMode()) + '</span>'
     + '<span class="mid">' + (mock ? '<span style="text-align:right"><span class="tmr-cap">剩餘時間</span><span class="tmr num" id="tmr">--:--</span></span>' : '<span class="prog">不計時</span>')
     + '<span class="prog num">已答 <b>' + answered() + '</b>／' + S.total + '</span>'
-    + '<button class="btn btn-ghost btn-sm" data-act="openFlags" title="標記待檢查的題目">🚩' + (nfl ? ' <b class="num">' + nfl + '</b>' : '') + '</button>'
     + '<button class="btn btn-ghost btn-sm sheet-toggle" data-act="sheet">答題卡</button>'
     + '<button class="btn ' + (mock ? 'btn-danger' : 'btn-pri') + ' btn-sm" data-act="submitAsk">' + (mock ? '交卷' : '結束練習') + '</button></span></div>';
   h += '<div class="exam-wrap"><div><div class="qcard"><div class="qhead"><span class="qno num">第 ' + (S.idx + 1) + ' 題</span>' + tags(q)
@@ -689,19 +699,18 @@ function vExam() {
   h += '</div>';
   if (revealed) {
     var hit = S.picked[S.idx] === q.ans;
-    h += '<div class="fb"><div class="verdict-row">' + paco(hit ? 'happy' : 'thumb', 'v-paco') + '<div><div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(q.ans)) + '</div>'
-      + '<div class="v-say">' + (hit ? 'Paco：太棒了，繼續保持！' : 'Paco：沒關係，看完解析就記住了！') + '</div></div></div>'
+    h += '<div class="fb"><div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(q.ans)) + '</div>'
       + '<div class="fbnav"><button class="btn btn-ghost btn-sm" data-act="retryQ">🔁 當題重新作答</button><span class="sp"></span>'
       + (S.idx === S.total - 1 ? '<button class="btn btn-pri btn-sm" data-act="submitAsk">結束並看結果 →</button>' : '<button class="btn btn-pri btn-sm" data-act="next">下一題 →</button>') + '</div>';
     if (hasOptExp(q)) {
       h += '<ul>' + q.exps.map(function (x, j) { return '<li class="' + (j === q.ans ? 'hit' : '') + '"><b>' + L(j) + (j === q.ans ? ' ✓' : ' ✗') + '</b><span>' + fmtTxt(x || '') + '</span></li>'; }).join('') + '</ul>';
       if (q.note) h += '<div class="offexp"><b>解析</b>　' + fmtTxt(q.note) + '</div>';
+      if (q.src) h += '<div class="qmeta">依據：' + fmtTxt(q.src) + '</div>';
     } else h += offNote(q);
-    if (q.src) h += '<div class="src">依據：' + fmtTxt(q.src) + '</div>';
     h += '</div>';
   }
   h += '<div class="qnav"><button class="btn btn-ghost" data-act="prev"' + (S.idx === 0 ? ' disabled' : '') + '>← 上一題</button><span class="sp"></span>'
-    + '<button class="btn btn-ghost" data-act="next"' + (S.idx === S.total - 1 ? ' disabled' : '') + '>下一題 →</button></div></div></div>';
+    + (revealed ? '' : '<button class="btn btn-ghost" data-act="next"' + (S.idx === S.total - 1 ? ' disabled' : '') + '>下一題 →</button>') + '</div></div></div>';
   h += '<aside class="sheet' + (sheetOpen ? ' open' : '') + '"><h4>答題卡</h4><div class="legend"><span class="l-done"><i></i>已作答</span><span><i></i>未作答</span><span class="l-flag"><i></i>標記</span></div><div class="gq-grid">';
   for (var k = 0; k < S.total; k++) {
     var c = 'gq num' + (S.picked[k] != null ? ' done' : '') + (S.flags[k] ? ' flag' : '') + (k === S.idx ? ' cur' : '');
@@ -746,7 +755,7 @@ function vResults() {
     + '<span class="chip">未答 <b class="num">' + skip + '</b> 題</span><span class="chip">用時 <b class="num">' + fmtClock(used) + '</b></span>'
     + (mock ? '<span class="chip">參考及格 <b class="num">' + e.pass + '</b> 分</span>' : '')
     + (mock && S.score < e.floor ? '<span class="chip" style="color:var(--bad)">低於單科最低 <b class="num">' + e.floor + '</b> 分</span>' : '') + '</div>'
-    + '<p class="rsay">Paco：' + (good ? (mock ? '恭喜及格！保持這個節奏，正式考試沒問題！' : '表現很棒！挑戰一下綜合模擬考吧！') : '再接再厲！先看錯題檢討，下次一定更好！') + '</p></div></div>';
+    + '<p class="rsay">' + (good ? (mock ? '恭喜及格！保持這個節奏，正式考試沒問題！' : '表現很棒！挑戰一下綜合模擬考吧！') : '再接再厲！先看錯題檢討，下次一定更好！') + '</p></div></div>';
   h += '<div class="tstats"><h3>各主題答對率</h3>';
   topicStats().forEach(function (r) {
     var p = Math.round(r.c * 100 / r.n), col = p >= 70 ? 'var(--ok-b)' : (p >= 50 ? '#D19A1F' : 'var(--bad-b)');
@@ -849,7 +858,7 @@ function vMarks(f) {
   var order = META.exams.map(function (e) { return e.id; }).filter(function (id) { return cnt[id]; });
   Object.keys(cnt).forEach(function (id) { if (order.indexOf(id) < 0) order.push(id); });
   NAV = [];
-  var h = pageHead('⭐ 收藏　<span class="num pcount" id="mkCnt">' + marks.length + '</span> 題', '作答、檢討或瀏覽題庫時按「☆ 收藏」，題目就會存在這裡，隨時複習。', 'happy');
+  var h = pageHead(ICON.star + '收藏　<span class="num pcount" id="mkCnt">' + marks.length + '</span> 題', '作答、檢討或瀏覽題庫時按「☆ 收藏」，題目就會存在這裡，隨時複習。', 'happy');
   if (!marks.length) {
     setHTML(h + '<div class="mempty">' + pacoSay('happy', '還沒有收藏任何題目喔！遇到想再看一次的題目，就按右上角的「☆ 收藏」吧。', 'empty-say') + '</div>');
     setView('marks', { f: '' }); return;
@@ -863,7 +872,7 @@ function vMarks(f) {
     + gOrd.map(function (g) { var n = grp[g].reduce(function (s, id) { return s + cnt[id]; }, 0); return '<button class="' + (f === 'g:' + g ? 'on' : '') + '" data-act="mkF" data-f="' + esc('g:' + g) + '">' + esc(g) + ' 全科（' + n + '）</button>'; }).join('')
     + order.map(function (id) { var e = examById(id); return '<button class="' + (f === id ? 'on' : '') + '" data-act="mkF" data-f="' + esc(id) + '">' + esc(e ? e.short : id) + '（' + cnt[id] + '）</button>'; }).join('') + '</div>';
   var shown = marks.filter(function (m) { return markMatch(m, f); });
-  h += '<div class="mkact"><button class="btn btn-pri" data-act="mkPractice" data-f="' + esc(f) + '">▶ 練習這 ' + shown.length + ' 題（隨機出題）</button><span class="mkhint">練習時作答後立即顯示解析。</span></div>'
+  h += practBox('mkPractice', 'data-f="' + esc(f) + '"', shown.length)
     + '<div class="mhint">直接往下滑逐題複習（含正確答案與解析）。</div>';
   var ids = (f && f.indexOf('g:') !== 0) ? [f] : (f ? grp[f.slice(2)] : order);
   ids.forEach(function (id) {
@@ -880,6 +889,39 @@ function vMarks(f) {
   setHTML(h); setView('marks', { f: f });
 }
 
+/* 收藏／錯題：依考科隨機抽 10～50 題練習 */
+var practN = 20;
+function practBox(act, attrs, total) {
+  if (!total) return '';
+  var opts = [10, 20, 30, 40, 50].filter(function (n, i) { return i === 0 || n <= total || [10, 20, 30, 40, 50][i - 1] < total; });
+  return '<div class="pbox"><span class="pbl">隨機抽題練習</span><div class="seg" id="segPN">'
+    + opts.map(function (n) { return '<button data-act="setPN" data-n="' + n + '"' + (practN === n ? ' class="on"' : '') + '>' + n + ' 題</button>'; }).join('')
+    + '<button data-act="setPN" data-n="0"' + (practN === 0 ? ' class="on"' : '') + '>全部 ' + total + ' 題</button></div>'
+    + '<button class="btn btn-pri" data-act="' + act + '" ' + attrs + '>▶ 開始練習</button></div>';
+}
+function pickN(list) { list = shuffle(list); return practN ? list.slice(0, practN) : list; }
+
+/* ================= 標記（考試中不確定、待檢查的題目） ================= */
+function vFlags() {
+  NAV = [];
+  var src = flagSrc(), fl = curFlags(src), e = src ? examById(src.examId) : null;
+  var h = pageHead(ICON.flag + '標記', '考試時不確定的題目，按「🚩 標記」就會收在這裡；完成考試並檢討後回到首頁，這些標記會自動清除。', 'study');
+  if (!fl.length) {
+    setHTML(h + '<div class="mempty">' + pacoSay('study', '目前沒有標記的題目。作答時遇到沒把握的題目，按右上角的「🚩 標記」（或鍵盤 F）就可以先記下來。', 'empty-say') + '</div>');
+    setView('flags', {}); return;
+  }
+  var title = src.label || (e ? e.short : '');
+  h += '<div class="mkact"><span class="flsrc"><b>' + esc(title) + '</b>　' + (src.done ? '已交卷' : '作答中（已作答 ' + src.picked.filter(function (p) { return p != null; }).length + '／' + src.total + '）') + '・標記 ' + fl.length + ' 題</span><span class="sp"></span>'
+    + (src.done ? '<button class="btn btn-ghost" data-act="toResults">回成績單</button>' : '<button class="btn btn-pri" data-act="resume">回到作答</button>') + '</div>';
+  fl.forEach(function (i) {
+    var q = src.qs[i], show = src.done || (src.mode === 'practice' && src.shown[i]);
+    h += '<div class="ovcard ' + hueCls(e) + '"><div class="ovhead"><span class="mbadge">第 ' + (i + 1) + ' 題</span>' + tags(q) + '<span class="sp"></span>' + markBtn(q.id, 'markId') + '</div>'
+      + '<p class="ovq">' + esc(q.q) + '</p>' + optionRows(q, src.picked[i], show) + '</div>';
+  });
+  if (!src.done) h += '<p class="mhint">測驗尚未交卷，暫不顯示正確答案。</p>';
+  setHTML(h); setView('flags', {});
+}
+
 /* ================= 錯題本（統整所有作答紀錄的錯題） ================= */
 var wrongShow = 30;
 function vWrongAll(f, t, keepShow) {
@@ -891,7 +933,7 @@ function vWrongAll(f, t, keepShow) {
   var byT = {}, tOrder = [];
   bankOf(f).forEach(function (q) { if (byT[q.topic] == null) { byT[q.topic] = 0; tOrder.push(q.topic); } });
   mine.forEach(function (x) { var q = rawById(x.id); if (q) byT[q.topic] = (byT[q.topic] || 0) + 1; });
-  var h = pageHead('📕 錯題本', '統整所有練習與模擬考中答錯、尚未訂正的題目；之後在任何練習中答對，就會自動移出。', 'thumb')
+  var h = pageHead(ICON.wrong + '錯題本', '統整所有練習與模擬考中答錯、尚未訂正的題目；之後在任何練習中答對，就會自動移出。', 'thumb')
     + examTabs('wrTab', f, function (id) { return cnt[id] || 0; });
   if (!mine.length) {
     setHTML(h + '<div class="mempty">' + pacoSay('cheer', '「' + esc(e.short) + '」目前沒有錯題，太厲害了！', 'empty-say') + '</div>');
@@ -901,7 +943,7 @@ function vWrongAll(f, t, keepShow) {
   h += '<div class="wtopics"><button class="' + (t ? '' : 'on') + '" data-act="wrT" data-t="">全部 <b class="num">' + mine.length + '</b></button>'
     + tOrder.filter(function (x) { return byT[x]; }).map(function (x) { var s = tShort(x); return '<button class="' + (t === x ? 'on' : '') + '" data-act="wrT" data-t="' + esc(x) + '">' + (s.no ? '<i>' + s.no + '</i>' : '') + esc(s.name) + ' <b class="num">' + byT[x] + '</b></button>'; }).join('') + '</div>';
   var shown = mine.filter(function (x) { return !t || (rawById(x.id) || {}).topic === t; });
-  h += '<div class="mkact"><button class="btn btn-pri" data-act="wrPractice" data-id="' + f + '" data-t="' + esc(t) + '">▶ 重練這 ' + shown.length + ' 題</button><span class="mkhint">答對的題目會自動從錯題本移除。</span></div>';
+  h += practBox('wrPractice', 'data-id="' + f + '" data-t="' + esc(t) + '"', shown.length) + '<p class="mkhint">答對的題目會自動從錯題本移除。</p>';
   shown.slice(0, wrongShow).forEach(function (x) {
     var raw = rawById(x.id), it = viewOf(raw);
     h += '<div class="ovcard ' + hueCls(e) + '"><div class="ovhead"><span class="st bad">答錯</span>' + tags(it) + '<span class="wdate num">' + fmtDate(x.w) + '</span><span class="sp"></span>' + markBtn(x.id, 'markId') + '</div>'
@@ -937,7 +979,7 @@ function vScores(id, f) {
   if (!id || !examById(id)) id = (his[0] && examById(his[0].examId)) ? his[0].examId : META.exams[0].id;
   f = f || 'mock';
   var e = examById(id), mocks = his.filter(function (r) { return r.examId === id && r.mode === 'mock'; });
-  var h = pageHead('📈 成績單', '記錄每一次模擬考的成績變化，看看自己進步了多少！', 'coin') + examTabs('scTab', id, function (x) { return cnt[x] || 0; });
+  var h = pageHead(ICON.map + '學習地圖', '記錄每一次模擬考的成績變化，看看自己進步了多少！', 'coin') + mapTabs('scores', id) + examTabs('scTab', id, function (x) { return cnt[x] || 0; });
   if (mocks.length) {
     var sum = 0, best = 0, pass = 0;
     mocks.forEach(function (r) { sum += r.score; best = Math.max(best, r.score); if (r.pass) pass++; });
@@ -981,8 +1023,8 @@ function vMap(id) {
   var tot = 0, tseen = 0, ta = 0, tc = 0;
   st.forEach(function (s) { tot += s.n; tseen += s.seen; ta += s.a; tc += s.c; s.cov = s.n ? s.seen / s.n : 0; s.acc = s.a ? s.c / s.a : 0; });
   var next = st.slice().sort(function (a, b) { return a.cov - b.cov; })[0];
-  var h = pageHead('🗺️ 學習地圖', 'Paco 陪你一站一站走完所有分類。點選站牌，就從那一站出發練 20 題（優先出還沒練過的題目）。', '')
-    + examTabs('mapTab', id, null);
+  var h = pageHead(ICON.map + '學習地圖', '一站一站走完所有分類！點選站牌，就從那一站出發練 20 題（優先出還沒練過的題目）。', '')
+    + mapTabs('map', id) + examTabs('mapTab', id, null);
   var pct = tot ? Math.round(tseen * 100 / tot) : 0;
   h += '<div class="mapsum"><div class="ring" style="--p:' + pct + '"><b class="num">' + pct + '<i>%</i></b><span>題庫探索度</span></div>'
     + '<div class="msum-txt"><div>已練過 <b class="num">' + tseen + '</b> ／ ' + tot + ' 題</div><div>累積作答 <b class="num">' + ta + '</b> 次，正確率 <b class="num">' + (ta ? Math.round(tc * 100 / ta) : 0) + '%</b></div>'
@@ -1030,11 +1072,11 @@ function vMap(id) {
 
 /* ================= 導航列／標記覆蓋層 ================= */
 var NAVS = [
-  { v: 'marks', act: 'navMarks', ico: '⭐', label: '收藏', badge: 'navMk' },
-  { v: 'wrongs', act: 'navWrong', ico: '📕', label: '錯題', badge: 'navWr' },
+  { v: 'marks', act: 'navMarks', ico: ICON.star, label: '收藏', badge: 'navMk' },
+  { v: 'wrongs', act: 'navWrong', ico: ICON.wrong, label: '錯題', badge: 'navWr' },
   { v: 'home', act: 'navHome', ico: '', label: '首頁', home: true },
-  { v: 'scores', act: 'navScores', ico: '📈', label: '成績單' },
-  { v: 'map', act: 'navMap', ico: '🗺️', label: '學習地圖' }
+  { v: 'flags', act: 'navFlags', ico: ICON.flag, label: '標記', badge: 'navFl' },
+  { v: 'map', act: 'navMap', ico: ICON.map, label: '學習地圖' }
 ];
 function buildChrome() {
   var nav = document.createElement('nav'); nav.id = 'bnav'; nav.setAttribute('aria-label', '主要功能');
@@ -1049,12 +1091,13 @@ function buildChrome() {
   document.body.appendChild(ov);
 }
 function activeWrongAll() { return getWrong().filter(function (x) { return (!x.r || x.w > x.r) && rawById(x.id); }); }
-function curFlags() { var a = []; if (S && S.qs) S.qs.forEach(function (q, i) { if (S.flags[i]) a.push(i); }); return a; }
+function curFlags(src) { src = src || S; var a = []; if (src && src.qs) src.qs.forEach(function (q, i) { if (src.flags[i]) a.push(i); }); return a; }
+/* 標記的來源：目前（含已交卷、尚未回首頁）的測驗，否則為暫存中未完成的測驗；回到首頁後已完成測驗的標記即清除 */
+function flagSrc() { return (S && S.qs) ? S : store.get(KEY.ses, null); }
 function updateFab() {
-  var nm = getMarks().length, nw = activeWrongAll().length, m = document.getElementById('navMk'), w = document.getElementById('navWr');
-  if (m) { m.textContent = nm > 999 ? '999+' : (nm || ''); m.classList.toggle('on', nm > 0); }
-  if (w) { w.textContent = nw > 999 ? '999+' : (nw || ''); w.classList.toggle('on', nw > 0); }
-  var top = { home: 'home', marks: 'marks', wrongs: 'wrongs', scores: 'scores', hisd: 'scores', map: 'map' }[curView] || '';
+  function put(id, n) { var el = document.getElementById(id); if (el) { el.textContent = n > 999 ? '999+' : (n || ''); el.classList.toggle('on', n > 0); } }
+  put('navMk', getMarks().length); put('navWr', activeWrongAll().length); put('navFl', curFlags(flagSrc()).length);
+  var top = { home: 'home', marks: 'marks', wrongs: 'wrongs', flags: 'flags', scores: 'map', hisd: 'map', map: 'map' }[curView] || '';
   document.querySelectorAll('#bnav .nv').forEach(function (b) { b.classList.toggle('on', b.dataset.v === top); });
 }
 function openFlags() {
@@ -1155,11 +1198,12 @@ var ACT = {
   navHome: function () { guardLeave(vHome); },
   navMarks: function () { guardLeave(function () { vMarks(''); }); },
   navWrong: function () { guardLeave(function () { vWrongAll(); }); },
-  navScores: function () { guardLeave(function () { vScores(); }); },
+  navFlags: function () { if (curView === 'exam' && S && !S.done) return openFlags(); vFlags(); },
+  navScores: function () { vScores(curArgs.id); },
   navMap: function () { guardLeave(function () { vMap(); }); },
   leaveYes: function () { closeModal(); clearInterval(timerId); timerId = null; var f = pendingLeave; pendingLeave = null; S = null; if (f) f(); },
   examBack: function () { var fr = S && S.from; guardLeave(function () { goFrom(fr); }); },
-  scTab: function (d) { vScores(d.id, curArgs.f); },
+  scTab: function (d) { vScores(d.id, curView === 'scores' ? curArgs.f : ''); },
   scF: function (d) { vScores(curArgs.id, d.f); },
   wrTab: function (d) { vWrongAll(d.id, ''); },
   wrT: function (d) { vWrongAll(curArgs.f, d.t || ''); },
@@ -1167,9 +1211,10 @@ var ACT = {
   wrPractice: function (d) {
     var list = activeWrongAll().filter(function (x) { return x.exam === d.id; }).map(function (x) { return rawById(x.id); })
       .filter(function (q) { return q && (!d.t || q.topic === d.t); });
-    if (list.length) makeSession(d.id, 'practice', shuffle(list).map(function (q) { return toItem(q); }), { type: 'wrong', wrongScope: 'all' });
+    if (list.length) makeSession(d.id, 'practice', pickN(list).map(function (q) { return toItem(q); }), { type: 'wrong', wrongScope: 'all' });
   },
   mapTab: function (d) { vMap(d.id); },
+  setPN: function (d, t) { practN = +d.n; seg('#segPN', t); },
   mapGo: function (d) {
     var seen = getSeen(), pool = dedup(bankOf(d.id).filter(function (q) { return q.topic === d.t; }));
     if (!pool.length) return;
@@ -1234,7 +1279,7 @@ var ACT = {
     var scope = '全部';
     if (f.indexOf('g:') === 0) scope = f.slice(2) + ' 全科';
     else if (f) { var e0 = examById(f); scope = e0 ? e0.short : f; }
-    var qs = shuffle(list).map(function (m) { return toItem(markRaw(m)); });
+    var qs = pickN(list).map(function (m) { return toItem(markRaw(m)); });
     makeSession(qs[0].exam || META.exams[0].id, 'practice', qs, { type: 'marks', marksFil: f, label: '⭐ 收藏題｜' + scope });
   },
 
@@ -1337,6 +1382,18 @@ document.addEventListener('click', function (e) {
 document.addEventListener('change', function (e) {
   if (e.target && e.target.id === 'bankSel' && curView === 'bank') vBank(curArgs.id, e.target.value || '', 0);
 });
+/* 手機：往下捲動時收起導航列，往上滑才出現 */
+var lastY = 0, touchY = null;
+function navShow(on) { document.body.classList.toggle('nav-hidden', !on); }
+window.addEventListener('scroll', function () {
+  var y = window.scrollY || 0;
+  if (window.innerWidth > 900) { navShow(true); lastY = y; return; }
+  if (y < lastY - 6) navShow(true);
+  else if (y > lastY + 6 && y > 30) navShow(false);
+  lastY = y;
+}, { passive: true });
+window.addEventListener('touchstart', function (e) { touchY = e.touches[0].clientY; }, { passive: true });
+window.addEventListener('touchmove', function (e) { if (touchY != null && e.touches[0].clientY - touchY > 40 && (window.scrollY || 0) < 10) navShow(true); }, { passive: true });
 document.addEventListener('keydown', function (e) {
   if (!S || S.done || curView !== 'exam' || document.getElementById('mask') || !document.getElementById('movl').hidden) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
