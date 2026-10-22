@@ -495,7 +495,6 @@ function tags(item) {
 function demoExams() {
   return (META.exams || []).filter(function (e) { var b = bankOf(e.id); return b.length && b.every(function (q) { return /^DEMO-/.test(q.id); }); });
 }
-var PACO_TIPS = ['今天也一起讀一點吧！', '先挑一個分類暖身，再挑戰綜合模擬考！', '錯題是最好的老師，記得去錯題本看看～', '每天 20 題，考試穩穩過！', '累了就看看學習地圖，你已經走好遠了！'];
 function vHome() {
   clearInterval(timerId); timerId = null; S = null; sheetOpen = false; NAV = []; setView('home');
   if (!META) { setHTML('<div class="panel" style="text-align:center"><h2>題庫建置中</h2><p class="notice">資料尚未載入，請稍後重新整理。</p></div>'); return; }
@@ -507,7 +506,7 @@ function vHome() {
     + '<h1>' + (cut > 0 ? '<span class="t1">' + esc(tl.slice(0, cut)) + '</span><em>' + esc(tl.slice(cut)) + '</em>' : esc(tl)) + '</h1>'
     + '<p class="sub">信託業業務人員信託業務專業測驗・期貨商業務員資格測驗</p>'
     + '<div class="bstats"><div><b class="num">' + nQ.toLocaleString() + '</b><span>官方歷屆試題</span></div><div><b class="num">' + nP + '</b><span>份整卷</span></div><div><b class="num">' + Object.keys(tps).length + '</b><span>章節分類</span></div></div></div>'
-    + '<div class="brand-art"><div class="bubble">' + esc(PACO_TIPS[new Date().getDate() % PACO_TIPS.length]) + '</div>' + paco('wave', 'brand-paco') + '<span class="art-tag">STUDY WITH PACO</span></div></header>';
+    + '<div class="brand-art"><div class="bubble">Paco 陪你一起讀書吧！</div>' + paco('wave', 'brand-paco') + '<span class="art-tag">STUDY WITH PACO</span></div></header>';
   var demo = demoExams();
   if (demo.length) h += '<div class="demo-banner">🧪 <b>' + demo.map(function (e) { return esc(e.name); }).join('、') + '</b> 目前為示範題（每科僅數題，用於展示功能），正式題庫匯入後此提示會自動消失。</div>';
   if (saved && saved.qs && saved.qs.length) {
@@ -919,7 +918,7 @@ function pickN(list) { list = shuffle(list); return practN ? list.slice(0, pract
 /* ================= 標記（考試中不確定、待檢查的題目） ================= */
 /* 標記題卡片：未交卷時可直接在這裡作答（不必逐題「跳到此題」） */
 function verdictHtml(hit, ansIdx) {
-  return '<div class="verdict-row">' + paco(hit ? 'happy' : 'thumb', 'v-paco') + '<div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(ansIdx)) + '</div></div>';
+  return '<div class="verdict-row">' + paco(hit ? 'thumb' : 'study', 'v-paco') + '<div class="verdict ' + (hit ? 'ok' : 'bad') + '">' + (hit ? '答對了！' : '答錯了，正確答案是 ' + L(ansIdx)) + '</div></div>';
 }
 function flagCards(src, inExam) {
   var e = examById(src.examId), h = '';
