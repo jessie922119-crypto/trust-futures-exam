@@ -541,6 +541,21 @@ function vHome() {
     });
     h += '</div>';
   });
+  h += '<div class="hist home-hist"><div class="hhead"><h3>歷史作答紀錄</h3><span class="sp"></span>'
+    + (his.length ? '<button class="btn btn-ghost btn-sm" data-act="clearAllAsk">清除作答紀錄</button>' : '') + '</div>';
+  if (!his.length) h += '<div class="mhint">還沒有作答紀錄，完成一次練習或模擬考後就會出現在這裡。</div>';
+  else {
+    h += '<div class="tw"><table><tr><th>時間</th><th>測驗</th><th>模式</th><th>成績</th><th>結果</th><th></th></tr>';
+    his.slice(0, 10).forEach(function (r, i) {
+      var e = examById(r.examId), pp = r.paper ? paperById(r.paper) : null;
+      h += '<tr class="num"><td>' + fmtDate(r.ts) + '</td><td>' + esc(e ? e.short : r.examId) + (pp ? ' <span class="hpaper">' + esc(pp.label) + '</span>' : '') + '</td>'
+        + '<td>' + modeName(r) + '</td><td>' + r.score + ' 分（' + r.correct + '/' + r.total + '）</td>'
+        + '<td>' + (r.pass == null ? '—' : (r.pass ? '<span class="pass-y">及格</span>' : '<span class="pass-n">未及格</span>')) + '</td>'
+        + '<td>' + (r.detail ? '<button class="linkbtn" data-act="hisView" data-i="' + i + '">檢視題目</button>' : '') + '</td></tr>';
+    });
+    h += '</table></div>' + (his.length > 10 ? '<div class="mhint">只顯示最近 10 筆，完整紀錄與成績曲線請到「學習地圖 → 成績單」。</div>' : '');
+  }
+  h += '</div>';
   h += '<footer class="foot"><div class="disc"><b>資料來源與聲明：</b>'
     + '<div>信託業務專業測驗：題目全部為金研院公布之官方歷屆試題（附官方正確答案），官方送分、一題多解或已刪除之題目不納入。</div>'
     + '<div>期貨商業務員：題庫建置中（目前為示範題）。</div>'
@@ -1034,7 +1049,7 @@ function vScores(id, f) {
     });
     h += '</table></div>';
   }
-  if (his.length) h += '<div style="margin-top:10px"><button class="btn btn-ghost btn-sm" data-act="clearHisAsk">清除全部紀錄</button></div>';
+  if (his.length) h += '<div style="margin-top:10px"><button class="btn btn-ghost btn-sm" data-act="clearAllAsk">清除作答紀錄</button></div>';
   h += '</div>';
   setHTML(h); setView('scores', { id: id, f: f });
 }
@@ -1356,11 +1371,20 @@ var ACT = {
     if (S.mode === 'mock' && Date.now() >= S.deadline) submit(true); else vExam();
   },
   abandon: function () { store.del(KEY.ses); vHome(); },
-  clearHisAsk: function () {
-    openModal('清除測驗紀錄？', '<p>將刪除所有測驗紀錄（收藏題與錯題本不受影響）' + (fb.user ? '，雲端同步資料也會一併更新' : '') + '。此動作無法復原。</p>',
-      '<button class="btn btn-ghost" data-act="modalClose">取消</button><button class="btn btn-danger" data-act="clearHis">清除</button>');
+  clearAllAsk: function () {
+    var n = store.get(KEY.his, []).length, m = getMarks().length, w = activeWrongAll().length, fl = curFlags(flagSrc()).length;
+    openModal('確定要清除所有作答紀錄嗎？', '<p>以下資料會<b>全部刪除</b>，而且<b>無法復原</b>：</p><ul class="clr-list">'
+      + '<li>歷史作答紀錄與成績單（' + n + ' 筆）</li><li>錯題本（' + w + ' 題）</li><li>收藏（' + m + ' 題）</li><li>標記（' + fl + ' 題，含未完成的測驗進度）</li><li>學習地圖的練習足跡與試卷集章</li></ul>'
+      + (fb.user ? '<p>你已登入 Google，<b>雲端同步的資料也會一併清除</b>。</p>' : ''),
+      '<button class="btn btn-ghost" data-act="modalClose">取消</button><button class="btn btn-danger" data-act="clearAll">確定全部清除</button>');
   },
-  clearHis: function () { closeModal(); store.del(KEY.his); scheduleSync(); vScores(curArgs.id); },
+  clearAll: function () {
+    closeModal();
+    [KEY.his, KEY.wrong, KEY.marks, KEY.ses].forEach(function (k) { store.del(k); });
+    store.set(KEY.seen, {}); store.set(KEY.papers, {});
+    S = null; scheduleSync();
+    if (curView === 'scores') vScores(curArgs.id); else vHome();
+  },
 
   markCur: function (d, t) { var on = toggleMark(S.qs[S.idx]); t.classList.toggle('on', on); t.textContent = on ? '★ 已收藏' : '☆ 收藏'; },
   markId: function (d, t) {

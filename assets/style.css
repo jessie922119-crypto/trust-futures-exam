@@ -745,3 +745,7 @@ details.more .rules{margin-top:8px}
 .fst.no{background:var(--bad-soft);color:var(--bad)}
 .fst.yes{background:var(--ok-soft);color:var(--ok)}
 .fcard .ovx{margin-right:8px}
+.home-hist{margin-top:30px}
+.home-hist .hhead h3{font-size:17px}
+.clr-list{margin:8px 0 10px;padding-left:20px;font-size:14px;color:var(--ink)}
+.clr-list li{margin:3px 0}
