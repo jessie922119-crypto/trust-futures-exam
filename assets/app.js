@@ -608,7 +608,7 @@ function vCustom(id) {
     if (!seen[key]) { seen[key] = 1; bySub[s].push(q.topic); }
   });
   custom = { id: id, n: 20, topics: [], ordered: false };
-  var h = '<div class="panel ' + hueCls(e) + '"><span class="ebadge">' + esc(e.badge) + '</span>' + pacoSay('happy', '選好題數和分類，我陪你一題一題練！', 'panel-paco') + '<h2>自訂練習｜' + esc(e.short) + '</h2>'
+  var h = '<div class="panel ' + hueCls(e) + '"><span class="ebadge">' + esc(e.badge) + '</span>' + pacoSay('happy', '自由選擇想練習的題數和分類！範圍也可多選唷！', 'panel-paco') + '<h2>自訂練習｜' + esc(e.short) + '</h2>'
     + '<p class="admin">不計時 ─ 每題作答後立即顯示解析，適合分主題複習（題庫共 ' + pool.length + ' 題）</p>'
     + '<div class="flabel">練習題數</div><div class="seg" id="segN">'
     + [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (n) { return '<button data-act="setN" data-n="' + n + '"' + (n === 20 ? ' class="on"' : '') + '>' + n + ' 題</button>'; }).join('')
